@@ -27,13 +27,13 @@ jobs:
       run: |
         sudo apt-get update  -y
         sudo apt-get install -y gettext
-        uv pip install
+        uv sync
 
     - name: Code checks
-      run: export SKIP=no-commit-to-branch; pre-commit run --all
+      run: SKIP=no-commit-to-branch uv run pre-commit run --all-files
 
     - name: building addon
-      run: scons && scons pot
+      run: uv run scons && uv run scons pot
 
     - uses: actions/upload-artifact@v7
       with:
