@@ -32,6 +32,9 @@ jobs:
     - name: Code checks
       run: SKIP=no-commit-to-branch uv run pre-commit run --all-files
 
+    - name: Regression tests
+      run: uv run python -m unittest discover -s tests -q
+
     - name: building addon
       run: uv run scons && uv run scons pot
 

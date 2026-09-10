@@ -3,6 +3,9 @@
 Run with an ordinary Python installation; no NVDA imports are needed.
 """
 
+from __future__ import annotations
+
+
 import argparse
 from pathlib import Path
 import shutil
@@ -14,7 +17,7 @@ SOURCE = Path(__file__).resolve().parent / "addon" / "appModules" / "inform.py"
 ADDON = SOURCE.parent.parent
 
 
-def deployment_sources():
+def deployment_sources() -> list[Path]:
     return [
         SOURCE,
         *(
@@ -35,13 +38,14 @@ def copy_to_scratchpad(scratchpad: Path, dry_run: bool = False) -> Path:
             raise FileNotFoundError(f"Add-on source not found: {source}")
         if (root / source.relative_to(ADDON)).resolve() == source.resolve():
             raise ValueError(
-                "Scratchpad destination must differ from the source directory")
+                "Scratchpad destination must differ from the source directory",
+            )
     for source in sources:
-        _copy_file(source, root / source.relative_to(ADDON), dry_run)
+        _ = _copy_file(source, root / source.relative_to(ADDON), dry_run)
     return root / "appModules" / SOURCE.name
 
 
-def _copy_file(source, destination, dry_run):
+def _copy_file(source: Path, destination: Path, dry_run: bool) -> Path:
     if dry_run:
         print(f"Would copy {source} -> {destination}")
         return destination
@@ -56,26 +60,29 @@ def _copy_file(source, destination, dry_run):
         while backup.exists():
             backup = destination.with_name(f"{destination.name}.bak.{index}")
             index += 1
-        shutil.copy2(destination, backup)
+        _ = shutil.copy2(destination, backup)
         print(f"Backup: {backup}")
-    shutil.copy2(source, destination)
+    _ = shutil.copy2(source, destination)
     print(f"Copied: {destination}")
     return destination
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    _ = parser.add_argument(
         "--scratchpad",
         type=Path,
         default=DEFAULT_SCRATCHPAD,
         help=f"Scratchpad directory (default: {DEFAULT_SCRATCHPAD})",
     )
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show the copy without changing files")
+    _ = parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show the copy without changing files",
+    )
     args = parser.parse_args()
     try:
-        copy_to_scratchpad(args.scratchpad, args.dry_run)
+        _ = copy_to_scratchpad(args.scratchpad, args.dry_run)
     except (OSError, ValueError) as error:
         print(f"Copy failed: {error}", file=sys.stderr)
         return 1

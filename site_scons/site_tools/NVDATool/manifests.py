@@ -7,12 +7,12 @@ from .utils import format_nested_section
 
 
 def generateManifest(
-        source: str,
-        dest: str,
-        addon_info: AddonInfo,
-        brailleTables: BrailleTables,
-        symbolDictionaries: SymbolDictionaries,
-        speechDictionaries: SpeechDictionaries,
+    source: str,
+    dest: str,
+    addon_info: AddonInfo,
+    brailleTables: BrailleTables,
+    symbolDictionaries: SymbolDictionaries,
+    speechDictionaries: SpeechDictionaries,
 ):
     # Prepare the root manifest section
     with codecs.open(source, "r", "utf-8") as f:
@@ -25,27 +25,31 @@ def generateManifest(
 
     # Custom speech symbol dictionaries
     if symbolDictionaries:
-        manifest += format_nested_section("symbolDictionaries",
-                                          symbolDictionaries)
+        manifest += format_nested_section(
+            "symbolDictionaries",
+            symbolDictionaries,
+        )
 
     # Custom speech pronunciation dictionaries
     if speechDictionaries:
-        manifest += format_nested_section("speechDictionaries",
-                                          speechDictionaries)
+        manifest += format_nested_section(
+            "speechDictionaries",
+            speechDictionaries,
+        )
 
     with codecs.open(dest, "w", "utf-8") as f:
         f.write(manifest)
 
 
 def generateTranslatedManifest(
-        source: str,
-        dest: str,
-        *,
-        mo: str,
-        addon_info: AddonInfo,
-        brailleTables: BrailleTables,
-        symbolDictionaries: SymbolDictionaries,
-        speechDictionaries: SpeechDictionaries,
+    source: str,
+    dest: str,
+    *,
+    mo: str,
+    addon_info: AddonInfo,
+    brailleTables: BrailleTables,
+    symbolDictionaries: SymbolDictionaries,
+    speechDictionaries: SpeechDictionaries,
 ):
     with open(mo, "rb") as f:
         _ = gettext.GNUTranslations(f).gettext
@@ -66,17 +70,23 @@ def generateTranslatedManifest(
     # Custom braille translation tables
     if brailleTables:
         manifest += _format_section_only_with_displayName(
-            "brailleTables", brailleTables)
+            "brailleTables",
+            brailleTables,
+        )
 
     # Custom speech symbol dictionaries
     if symbolDictionaries:
         manifest += _format_section_only_with_displayName(
-            "symbolDictionaries", symbolDictionaries)
+            "symbolDictionaries",
+            symbolDictionaries,
+        )
 
     # Custom speech pronunciation dictionaries
     if speechDictionaries:
         manifest += _format_section_only_with_displayName(
-            "speechDictionaries", speechDictionaries)
+            "speechDictionaries",
+            speechDictionaries,
+        )
 
     with codecs.open(dest, "w", "utf-8") as f:
         f.write(manifest)

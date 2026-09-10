@@ -41,6 +41,9 @@ dependencies = [
 [project.urls]
 Repository = "https://github.com/nvaccess/addonTemplate"
 
+[tool.setuptools.packages.find]
+include = ["addon*"]
+
 [tool.ruff]
 line-length = 110
 
@@ -57,6 +60,7 @@ builtins = [
 
 include = [
 	"*.py",
+	"*.pyi",
 	"sconstruct",
 ]
 
@@ -68,7 +72,7 @@ exclude = [
 ]
 
 [tool.ruff.format]
-indent-style = "tab"
+indent-style = "space"
 line-ending = "lf"
 
 [tool.ruff.lint.mccabe]
@@ -90,10 +94,12 @@ logger-objects = ["logHandler.log"]
 venvPath = ".venv"
 venv = "."
 pythonPlatform = "Windows"
+stubPath = "typings"
 typeCheckingMode = "strict"
 
 include = [
 	"**/*.py",
+	"typings/**/*.pyi",
 ]
 
 exclude = [
@@ -110,7 +116,6 @@ exclude = [
 # Tell pyright where to load python code from
 extraPaths = [
 	"./addon",
-	"../nvda/source",
 ]
 
 # General config
@@ -152,9 +157,12 @@ reportInvalidTypeForm = true
 reportInvalidTypeVarUse = true
 reportMatchNotExhaustive = true
 reportMissingImports = true
-reportMissingModuleSource = true
+# NVDA and wx supply implementations at runtime; CI resolves their checked-in stubs.
+reportMissingModuleSource = false
 reportMissingParameterType = true
-reportMissingSuperCall = true
+# NVDA invokes overlay initialization hooks separately; many callbacks replace
+# base behavior. Calling super is not universally valid for this framework.
+reportMissingSuperCall = false
 reportMissingTypeArgument = true
 reportNoOverloadImplementation = true
 reportOperatorIssue = true
@@ -177,7 +185,8 @@ reportTypedDictNotRequiredAccess = true
 reportUnboundVariable = true
 reportUndefinedVariable = true
 reportUnhashable = true
-reportUninitializedInstanceVariable = true
+# NVDA initializes overlays/settings in hooks; unittest initializes in setUp.
+reportUninitializedInstanceVariable = false
 reportUnknownArgumentType = true
 reportUnknownLambdaType = true
 reportUnknownMemberType = true

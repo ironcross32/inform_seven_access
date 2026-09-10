@@ -1,5 +1,13 @@
 """Style stacks and speech rendering; independent of editor text and colours."""
 
+from __future__ import annotations
+
+from typing import Literal, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from speech.commands import SpeechCommand
+
+
 from pathlib import Path
 from wave import Error as WaveError
 
@@ -8,6 +16,10 @@ from speech.commands import WaveFileCommand
 
 from . import _, syntaxMode, getSoundVolume
 from .soundVolume import scaledSoundPath
+
+SyntaxKind = Literal["quoted text", "text substitution", "Inform 6 code", "heading", "comment"]
+SyntaxStack = tuple[SyntaxKind, ...]
+SyntaxEvent = tuple[Literal["begin", "end"], SyntaxKind]
 
 
 SOUND_DIRECTORY = Path(__file__).resolve().parents[2] / "sounds"
@@ -19,10 +31,10 @@ SOUND_NAMES = {
     # No dedicated Inform 6 pair was supplied; reuse the comment boundary cues.
     "Inform 6 code": "comment",
 }
-_missingSounds = set()
+_missingSounds: set[str] = set()
 
 
-def styleStack(style):
+def styleStack(style: int) -> SyntaxStack:
     style &= 0x1F
     if style == 1:
         return ("quoted text",)
@@ -37,16 +49,16 @@ def styleStack(style):
     return ()
 
 
-def stackEvents(before, after):
+def stackEvents(before: SyntaxStack, after: SyntaxStack) -> list[SyntaxEvent]:
     common = 0
     while common < min(len(before), len(after)) and before[common] == after[common]:
         common += 1
-    return [("end", kind) for kind in reversed(before[common:])] + [
-        ("begin", kind) for kind in after[common:]
-    ]
+    events: list[SyntaxEvent] = [("end", kind) for kind in reversed(before[common:])]
+    events.extend(("begin", kind) for kind in after[common:])
+    return events
 
 
-def renderMarker(event):
+def renderMarker(event: SyntaxEvent) -> list[str | SpeechCommand]:
     """Queue the cue at the same boundary as speech, with NVDA cancellation.
 
     No audio is played during text extraction or ahead of the speech queue.
@@ -68,7 +80,7 @@ def renderMarker(event):
         ("begin", "comment"): _("Begin comment"),
         ("end", "comment"): _("End comment"),
     }
-    sequence = []
+    sequence: list[str | SpeechCommand] = []
     volume = getSoundVolume()
     if mode in ("speechAndSounds", "sounds") and volume > 0:
         prefix = SOUND_NAMES.get(event[1])
@@ -77,18 +89,25 @@ def renderMarker(event):
             path = SOUND_DIRECTORY / f"{prefix}_{suffix}.wav"
             if path.is_file():
                 try:
-                    sequence.append(WaveFileCommand(
-                        str(scaledSoundPath(path, volume))))
+                    sequence.append(
+                        WaveFileCommand(
+                            str(scaledSoundPath(path, volume)),
+                        ),
+                    )
                 except (OSError, ValueError, EOFError, WaveError):
                     # Never fall back to full-volume playback after attenuation fails.
                     if path.name not in _missingSounds:
                         _missingSounds.add(path.name)
                         log.warning(
-                            "Inform 7 Access: unable to prepare syntax sound: %s", path.name)
+                            "Inform 7 Access: unable to prepare syntax sound: %s",
+                            path.name,
+                        )
             elif path.name not in _missingSounds:
                 _missingSounds.add(path.name)
                 log.warning(
-                    "Inform 7 Access: syntax sound unavailable: %s", path.name)
+                    "Inform 7 Access: syntax sound unavailable: %s",
+                    path.name,
+                )
     if mode in ("speech", "speechAndSounds"):
         sequence.append(labels[event])
     return sequence

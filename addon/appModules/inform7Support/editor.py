@@ -1,5 +1,14 @@
 """Inform-only Scintilla formatting and private speech boundary fields."""
 
+from __future__ import annotations
+
+from typing import Any, Self, TYPE_CHECKING, override, cast
+
+if TYPE_CHECKING:
+    from speech.commands import SpeechCommand
+    from .syntax import SyntaxStack, SyntaxEvent
+
+
 import colors
 import config
 import controlTypes
@@ -21,22 +30,35 @@ SCI_STYLEGETBACK = 2482
 
 
 class InformSourceTextInfo(ScintillaTextInfo):
-    def expand(self, unit):
+    _syntaxReadingUnit: str | None = None
+
+    @override
+    def expand(self, unit: str) -> None:
         super().expand(unit)
         self._syntaxReadingUnit = unit
 
-    def copy(self):
+    @override
+    def copy(self) -> Self:
         info = super().copy()
         info._syntaxReadingUnit = getattr(self, "_syntaxReadingUnit", None)
         return info
 
-    def _send(self, message, value=0):
+    def _send(self, message: int, value: int = 0) -> int:
         return watchdog.cancellableSendMessage(self.obj.windowHandle, message, value, 0)
 
-    def _getFormatFieldAndOffsets(self, offset, formatConfig, calculateOffsets=True):
+    @override
+    def _getFormatFieldAndOffsets(
+        self,
+        offset: int,
+        formatConfig: dict[str, Any],
+        calculateOffsets: bool = True,
+    ) -> tuple[textInfos.FormatField, tuple[int, int]]:
         # Inherit NVDA's attributes without its whole-line byte-by-byte style scan.
         field, offsets = super()._getFormatFieldAndOffsets(
-            offset, formatConfig, calculateOffsets=False)
+            offset,
+            formatConfig,
+            calculateOffsets=False,
+        )
         style = self._send(SCI_GETSTYLEAT, offset)
         if calculateOffsets:
             lineEnd = self._getLineOffsets(offset)[1]
@@ -54,12 +76,14 @@ class InformSourceTextInfo(ScintillaTextInfo):
             field["font-size"] = _("%s pt") % f"{size:g}"
         if formatConfig.get("reportColor"):
             field["color"] = colors.RGB.fromCOLORREF(
-                self._send(SCI_STYLEGETFORE, style))
+                self._send(SCI_STYLEGETFORE, style),
+            )
             field["background-color"] = colors.RGB.fromCOLORREF(
-                self._send(SCI_STYLEGETBACK, style))
+                self._send(SCI_STYLEGETBACK, style),
+            )
         return field, offsets
 
-    def _syntaxEvents(self):
+    def _syntaxEvents(self) -> dict[int, list[SyntaxEvent]]:
         """Map character indices in this range to events, using native byte offsets.
 
         Only the requested range and its immediate neighbours are queried. Nothing
@@ -70,22 +94,22 @@ class InformSourceTextInfo(ScintillaTextInfo):
         if start >= end or start >= length:
             return {}
         end = min(end, length)
-        styles = {}
+        styles: dict[int, SyntaxStack] = {}
 
-        def stack(offset):
+        def stack(offset: int) -> SyntaxStack:
             if offset < 0:
                 return ()
             if offset not in styles:
                 styles[offset] = styleStack(self._send(SCI_GETSTYLEAT, offset))
             return styles[offset]
 
-        def previous(offset):
+        def previous(offset: int) -> int:
             return self._getCharacterOffsets(offset - 1)[0] if offset > 0 else -1
 
-        def char(offset):
+        def char(offset: int) -> str:
             return self._getTextRange(offset, self._getCharacterOffsets(offset)[1]) if offset >= 0 else ""
 
-        result = {}
+        result: dict[int, list[SyntaxEvent]] = {}
         pos, index = start, 0
         prev = previous(start)
         before = stack(prev)
@@ -107,21 +131,21 @@ class InformSourceTextInfo(ScintillaTextInfo):
                         after = ()
                 elif before == ("Inform 6 code",) and last == ")" and char(previous(prev)) == "-":
                     after = ()
-            events = stackEvents(before, after)
+            events: list[SyntaxEvent] = stackEvents(before, after)
             # Adjacent siblings can share a style, concealing their transition.
             if before == after and before and pos < length and prev >= 0:
                 kind = before[-1]
                 if kind in ("comment", "text substitution"):
                     if self._send(SCI_GETCHARAT, prev) == ord("]") and self._send(SCI_GETCHARAT, pos) == ord(
-                            "["
+                        "[",
                     ):
                         events = [("end", kind), ("begin", kind)]
                 elif kind == "Inform 6 code" and self._send(SCI_GETCHARAT, prev) == ord(")"):
                     if (
-                            char(previous(prev)) == "-"
-                            and pos + 1 < length
-                            and self._send(SCI_GETCHARAT, pos) == ord("(")
-                            and self._send(SCI_GETCHARAT, pos + 1) == ord("-")
+                        char(previous(prev)) == "-"
+                        and pos + 1 < length
+                        and self._send(SCI_GETCHARAT, pos) == ord("(")
+                        and self._send(SCI_GETCHARAT, pos + 1) == ord("-")
                     ):
                         events = [("end", kind), ("begin", kind)]
             events = [
@@ -141,8 +165,12 @@ class InformSourceTextInfo(ScintillaTextInfo):
             index += 1
         return result
 
-    def getTextWithFields(self, formatConfig=None):
-        formatConfig = formatConfig or config.conf["documentFormatting"]
+    @override
+    def getTextWithFields(
+        self,
+        formatConfig: dict[str, Any] | None = None,
+    ) -> list[str | textInfos.FieldCommand]:
+        formatConfig = formatConfig or cast(dict[str, Any], config.conf["documentFormatting"])
         ordinary = super().getTextWithFields(formatConfig)
         if not syntaxEnabled():
             return ordinary
@@ -151,35 +179,39 @@ class InformSourceTextInfo(ScintillaTextInfo):
         # extraDetail alone cannot distinguish word from character navigation.
         unit = getattr(self, "_syntaxReadingUnit", None)
         if unit == textInfos.UNIT_CHARACTER or (
-                unit != textInfos.UNIT_WORD
-                and formatConfig.get("extraDetail")
-                and len("".join(item for item in ordinary if isinstance(item, str))) == 1
+            unit != textInfos.UNIT_WORD
+            and formatConfig.get("extraDetail")
+            and len("".join(item for item in ordinary if isinstance(item, str))) == 1
         ):
             return ordinary
         try:
             events = self._syntaxEvents()
             if not events:
                 return ordinary
-            result = []
+            result: list[str | textInfos.FieldCommand] = []
             active = textInfos.FormatField()
             index = 0
             for item in ordinary:
                 if not isinstance(item, str):
                     if item.command == "formatChange":
-                        active = textInfos.FormatField(item.field)
+                        active = textInfos.FormatField(item.field or {})
                     result.append(item)
                     continue
                 stop = index + len(item)
                 cursor = index
                 for boundary in sorted(p for p in events if index <= p < stop):
                     if boundary > cursor:
-                        result.append(item[cursor - index: boundary - index])
+                        result.append(item[cursor - index : boundary - index])
                     field = textInfos.FormatField(active)
                     field[SYNTAX_FIELD] = tuple(events.pop(boundary))
-                    result.append(textInfos.FieldCommand(
-                        "formatChange", field))
+                    result.append(
+                        textInfos.FieldCommand(
+                            "formatChange",
+                            field,
+                        ),
+                    )
                     cursor = boundary
-                result.append(item[cursor - index:])
+                result.append(item[cursor - index :])
                 index = stop
             if index in events:
                 field = textInfos.FormatField(active)
@@ -191,22 +223,25 @@ class InformSourceTextInfo(ScintillaTextInfo):
         except Exception:
             # Do not include exception text: it might contain source-code contents.
             log.warning(
-                "Inform 7 Access: syntax extraction failed; using ordinary reading")
+                "Inform 7 Access: syntax extraction failed; using ordinary reading",
+            )
             return ordinary
 
+    @override
     def getFormatFieldSpeech(
-            self,
-            attrs,
-            attrsCache=None,
-            formatConfig=None,
-            reason=None,
-            unit=None,
-            extraDetail=False,
-            initialFormat=False,
-    ):
+        self,
+        attrs: textInfos.Field,
+        attrsCache: textInfos.Field | None = None,
+        formatConfig: dict[str, bool] | None = None,
+        reason: controlTypes.OutputReason | None = None,
+        unit: str | None = None,
+        extraDetail: bool = False,
+        initialFormat: bool = False,
+    ) -> list[str | SpeechCommand]:
         # Keep the private events out of NVDA's persistent formatting cache.
         ordinary = textInfos.FormatField(
-            {key: value for key, value in attrs.items() if key != SYNTAX_FIELD})
+            {key: value for key, value in attrs.items() if key != SYNTAX_FIELD},
+        )
         sequence = super().getFormatFieldSpeech(
             ordinary,
             attrsCache,
@@ -217,19 +252,19 @@ class InformSourceTextInfo(ScintillaTextInfo):
             initialFormat,
         )
         if (
-                syntaxEnabled()
-                and (not extraDetail or unit == textInfos.UNIT_WORD)
-                and unit != textInfos.UNIT_CHARACTER
-                and (
-                    unit
-                    in (
-                        textInfos.UNIT_WORD,
-                        textInfos.UNIT_LINE,
-                        textInfos.UNIT_PARAGRAPH,
-                        textInfos.UNIT_READINGCHUNK,
-                    )
-                    or reason == controlTypes.OutputReason.SAYALL
+            syntaxEnabled()
+            and (not extraDetail or unit == textInfos.UNIT_WORD)
+            and unit != textInfos.UNIT_CHARACTER
+            and (
+                unit
+                in (
+                    textInfos.UNIT_WORD,
+                    textInfos.UNIT_LINE,
+                    textInfos.UNIT_PARAGRAPH,
+                    textInfos.UNIT_READINGCHUNK,
                 )
+                or reason == controlTypes.OutputReason.SAYALL
+            )
         ):
             for event in attrs.get(SYNTAX_FIELD, ()):
                 sequence.extend(renderMarker(event))

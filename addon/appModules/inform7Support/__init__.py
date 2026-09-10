@@ -1,9 +1,12 @@
 """Shared configuration and translations for the app module and global plugin."""
 
+from __future__ import annotations
+
+
 import config
 
 
-def _(message):
+def _(message: str) -> str:
     """English fallback for scratchpad loading without an add-on catalogue."""
     return message
 
@@ -19,7 +22,7 @@ else:
         pass
 
 
-def registerConfig():
+def registerConfig() -> None:
     config.conf.spec["inform7"] = {
         "soundVolume": "integer(min=0, max=100, default=100)",
         "syntaxFeedbackMode": "option('none', 'speech', 'speechAndSounds', 'sounds', 'legacy', default='legacy')",
@@ -32,11 +35,11 @@ def registerConfig():
 SYNTAX_MODES = ("none", "speech", "speechAndSounds", "sounds")
 
 
-def getSoundVolume():
+def getSoundVolume() -> int:
     return config.conf["inform7"].get("soundVolume", 100)
 
 
-def syntaxMode():
+def syntaxMode() -> str:
     section = config.conf["inform7"]
     mode = section.get("syntaxFeedbackMode", "legacy")
     if mode == "legacy":
@@ -44,6 +47,6 @@ def syntaxMode():
     return mode
 
 
-def syntaxEnabled():
+def syntaxEnabled() -> bool:
     # Read the active profile each time, rather than caching its value.
     return syntaxMode() != "none"

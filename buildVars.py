@@ -19,7 +19,8 @@ addon_info = AddonInfo(
     # Translators: Summary/title for this add-on
     # to be shown on installation and add-on information found in add-on store
     addon_summary=_(
-        "Improves accessibility for the Inform IDE for writing interactive fiction."),
+        "Improves accessibility for the Inform IDE for writing interactive fiction.",
+    ),
     # Add-on description
     # Translators: Long description to be shown for this add-on on add-on information from add-on store
     addon_description=_("""Provides automatic readout of incoming text while the interpreter window has focus
@@ -30,7 +31,8 @@ addon_info = AddonInfo(
     # Brief changelog for this version
     # Translators: what's new content for the add-on version to be shown in the add-on store
     addon_changelog=_(
-        """Add selectable speech and sound feedback for source syntax, Inform 7 settings, corrected font sizes and source colours."""),
+        """Add selectable speech and sound feedback for source syntax, Inform 7 settings, corrected font sizes and source colours.""",
+    ),
     # Author(s)
     addon_author="bscross32",
     # URL for the add-on documentation support

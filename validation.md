@@ -1,5 +1,24 @@
 # Version 0.2.0 validation
 
+## CI checks follow-up (2026-09-10)
+
+- Added explicit types for add-on code, deployment helpers and test fixtures.
+  Strict Pyright checking now includes the partial NVDA/wx declarations in
+  `typings/`; it no longer requires a sibling NVDA source checkout. See
+  [the API contract notes](typings/API.md) for scope and upstream references.
+- Kept missing imports and annotation/argument/return diagnostics enabled.
+  Adjusted runtime-source and lifecycle checks for stub-only CI dependencies,
+  NVDA overlay/settings initialization and unittest fixtures.
+- Aligned the Ruff hook with the pinned dependency version and repository space
+  indentation. Applied trailing-comma, formatting and final-newline fixes.
+  Excluded the user-maintained README.md from automatic pre-commit hooks.
+- All pre-commit hooks pass, including Pyright with zero errors and warnings;
+  standalone Ruff lint and formatting checks pass.
+- All 71 regression tests pass on Python 3.13.11, including a new missing-geometry
+  status-selection case. The workflow now runs this suite after code checks.
+- `uv run scons -s` and `uv run scons pot` succeed locally. Hosted Linux CI and
+  live speech, braille and settings behavior still require verification.
+
 Recorded September 9, 2026.
 
 Logging follow-up: routine Inform activity now uses Debug rather than Info.

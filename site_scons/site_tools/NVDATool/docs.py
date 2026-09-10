@@ -7,12 +7,12 @@ from .typings import AddonInfo
 
 
 def md2html(
-        source: str | Path,
-        dest: str | Path,
-        *,
-        moFile: str | Path | None,
-        mdExtensions: list[str],
-        addon_info: AddonInfo,
+    source: str | Path,
+    dest: str | Path,
+    *,
+    moFile: str | Path | None,
+    mdExtensions: list[str],
+    addon_info: AddonInfo,
 ):
     if isinstance(source, str):
         source = Path(source)

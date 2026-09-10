@@ -1,0 +1,3 @@
+class RGB:
+    @classmethod
+    def fromCOLORREF(cls, value: int) -> RGB: ...

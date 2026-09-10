@@ -38,15 +38,19 @@ def generate(env):
     env.SetDefault(gettext_package_version="")
 
     env["BUILDERS"]["gettextMoFile"] = env.Builder(
-        action=Action("msgfmt -o $TARGET $SOURCE",
-                      "Compiling translation $SOURCE"),
+        action=Action(
+            "msgfmt -o $TARGET $SOURCE",
+            "Compiling translation $SOURCE",
+        ),
         suffix=".mo",
         src_suffix=".po",
     )
 
     env["BUILDERS"]["gettextPotFile"] = env.Builder(
-        action=Action("xgettext " + XGETTEXT_COMMON_ARGS,
-                      "Generating pot file $TARGET"),
+        action=Action(
+            "xgettext " + XGETTEXT_COMMON_ARGS,
+            "Generating pot file $TARGET",
+        ),
         suffix=".pot",
     )
 

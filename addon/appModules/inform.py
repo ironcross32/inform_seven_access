@@ -1,5 +1,14 @@
 # Inform 7 Access: automatic announcements for the embedded interpreter.
 
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Any, Literal, Protocol, TYPE_CHECKING, override, cast
+
+if TYPE_CHECKING:
+    from NVDAObjects import NVDAObject
+    from NVDAObjects.IAccessible import IAccessible
+
 import weakref
 import threading
 import re
@@ -18,6 +27,12 @@ from NVDAObjects.IAccessible import getNVDAObjectFromEvent
 from NVDAObjects.behaviors import LiveText
 from scriptHandler import script
 
+LineAction = Literal["first", "last", "previous", "current", "next"]
+
+
+class SendableGesture(Protocol):
+    def send(self) -> None: ...
+
 
 POLL_INTERVAL_MS = 250
 
@@ -25,10 +40,10 @@ POLL_INTERVAL_MS = 250
 class LineReadingCursor:
     """A logical line index, independent of NVDA review and the editing caret."""
 
-    def __init__(self):
-        self.index = None
+    def __init__(self) -> None:
+        self.index: int | None = None
 
-    def read(self, text, action):
+    def read(self, text: str, action: LineAction) -> str:
         lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         last = len(lines) - 1
         if self.index is None:
@@ -45,8 +60,14 @@ class LineReadingCursor:
             target = last
             boundary = ""
         else:
-            target = self.index + {"previous": -
-                                   1, "current": 0, "next": 1}[action]
+            target = (
+                self.index
+                + {
+                    "previous": -1,
+                    "current": 0,
+                    "next": 1,
+                }[action]
+            )
         if target < 0:
             boundary = "Top"
         elif target > last:
@@ -56,7 +77,7 @@ class LineReadingCursor:
         return f"{boundary}, {line}" if boundary else line
 
 
-def formatStatusText(text):
+def formatStatusText(text: str) -> str:
     """Turn the grid's column padding into pauses, keeping each field intact."""
     return ", ".join(
         field.strip()
@@ -66,31 +87,43 @@ def formatStatusText(text):
     )
 
 
-def chooseStoryStatus(interpreters, candidates, preferredHandle=None):
+def chooseStoryStatus(
+    interpreters: Sequence[IAccessible],
+    candidates: Sequence[IAccessible],
+    preferredHandle: int | None = None,
+) -> IAccessible | None:
     """Match a short status grid just above a visible interpreter, by geometry."""
-    matches = []
+    matches: list[tuple[tuple[bool, int, int, int], IAccessible]] = []
     for interpreter in interpreters:
+        if interpreter.location is None:
+            continue
         x, y, width, height = interpreter.location
         if width <= 0 or height <= 0:
             continue
         for candidate in candidates:
+            if candidate.location is None:
+                continue
             left, top, gridWidth, gridHeight = candidate.location
             gap = y - (top + gridHeight)
             if (
-                    0 < gridHeight <= min(120, height / 3)
-                    and abs(left - x) <= max(8, width * 0.05)
-                    and abs(gridWidth - width) <= max(24, width * 0.15)
-                    and -2 <= gap <= max(12, gridHeight * 2)
+                0 < gridHeight <= min(120, height / 3)
+                and abs(left - x) <= max(8, width * 0.05)
+                and abs(gridWidth - width) <= max(24, width * 0.15)
+                and -2 <= gap <= max(12, gridHeight * 2)
             ):
                 # Prefer the focused/last-used interpreter; otherwise the right
                 # pane requested by the user. Never choose a whole container pane.
-                score = (interpreter.windowHandle !=
-                         preferredHandle, -x, abs(gap), abs(left - x))
+                score = (
+                    interpreter.windowHandle != preferredHandle,
+                    -x,
+                    abs(gap),
+                    abs(left - x),
+                )
                 matches.append((score, candidate))
     return min(matches, key=lambda match: match[0])[1] if matches else None
 
 
-def accountForTypedText(oldText, newText, pending):
+def accountForTypedText(oldText: str, newText: str, pending: str) -> tuple[str, str]:
     """Put confirmed keyboard insertions in the diff baseline, preserving output.
 
     Returns the adjusted old text and any characters not yet seen in the window.
@@ -118,12 +151,19 @@ def accountForTypedText(oldText, newText, pending):
     baseline = oldText[:start] + inserted[:count] + oldText[oldEnd:]
     # Replacements can reuse an equal suffix from the old selection. Do not
     # leave those already-entered characters waiting to suppress later output.
-    remaining = pending[count:] if count == len(
-        inserted) and oldEnd == start else ""
+    remaining = (
+        pending[count:]
+        if count
+        == len(
+            inserted,
+        )
+        and oldEnd == start
+        else ""
+    )
     return baseline, remaining
 
 
-def isInterpreterCandidate(obj):
+def isInterpreterCandidate(obj: NVDAObject) -> bool:
     """Provisional match until we have stable parent-window information."""
     return (
         (getattr(obj, "windowClassName", "") or "").upper() == "RICHEDIT50W"
@@ -135,11 +175,11 @@ def isInterpreterCandidate(obj):
     )
 
 
-def describeObject(obj):
+def describeObject(obj: object | None) -> str:
     """Log identification fields without reading the story or invoking TextInfo."""
     if obj is None:
         return "None"
-    fields = []
+    fields: list[str] = []
     for name in ("processID", "windowHandle", "windowClassName", "windowStyle", "IAccessibleChildID", "role"):
         try:
             value = getattr(obj, name, None)
@@ -153,13 +193,21 @@ def describeObject(obj):
 class InterpreterOutput(LiveText):
     """Keep Rich Edit navigation, adding NVDA's normal live-text reporting."""
 
-    def initOverlayClass(self):
+    if TYPE_CHECKING:
+        # Supplied by the Rich Edit Window overlay in NVDA's dynamic MRO.
+        windowHandle: int
+        _get_windowText: Callable[[], str]
+        _lastReadText: str | None
+
+    # NVDA initializes each overlay separately; this hook must not call super.
+    @override
+    def initOverlayClass(self) -> None:
         self._inputLock = threading.RLock()
         self._pendingTypedText = ""
-        self._submittedBaseline = None
-        self._preparedDiff = None
+        self._submittedBaseline: str | None = None
+        self._preparedDiff: tuple[str, str] | None = None
 
-    def _readTranscriptLine(self, gesture, action):
+    def _readTranscriptLine(self, gesture: SendableGesture, action: LineAction) -> None:
         if api.getFocusObject() is not self:
             gesture.send()
             return
@@ -168,13 +216,14 @@ class InterpreterOutput(LiveText):
             # review position, selection, or caret. Keep position across NVDA
             # object recreation and focus changes, separately for each pane.
             text = self._get_windowText()
-            cursors = self.appModule._lineReadingCursors
+            cursors = cast(AppModule, self.appModule)._lineReadingCursors  # pyright: ignore[reportPrivateUsage]
             cursor = cursors.setdefault(self.windowHandle, LineReadingCursor())
             ui.message(cursor.read(text, action))
         except Exception:
             log.exception("Inform 7 Access: unable to read interpreter line")
             ui.message(
-                "Unable to read the interpreter text. See the NVDA log for details.")
+                "Unable to read the interpreter text. See the NVDA log for details.",
+            )
 
     @script(
         description="Read the previous interpreter line using the independent reading cursor.",
@@ -182,7 +231,7 @@ class InterpreterOutput(LiveText):
         gesture="kb:control+shift+u",
         speakOnDemand=True,
     )
-    def script_readPreviousLine(self, gesture):
+    def script_readPreviousLine(self, gesture: SendableGesture) -> None:
         self._readTranscriptLine(gesture, "previous")
 
     @script(
@@ -191,7 +240,7 @@ class InterpreterOutput(LiveText):
         gesture="kb:control+shift+i",
         speakOnDemand=True,
     )
-    def script_readCurrentLine(self, gesture):
+    def script_readCurrentLine(self, gesture: SendableGesture) -> None:
         self._readTranscriptLine(gesture, "current")
 
     @script(
@@ -200,7 +249,7 @@ class InterpreterOutput(LiveText):
         gesture="kb:control+shift+o",
         speakOnDemand=True,
     )
-    def script_readNextLine(self, gesture):
+    def script_readNextLine(self, gesture: SendableGesture) -> None:
         self._readTranscriptLine(gesture, "next")
 
     @script(
@@ -209,7 +258,7 @@ class InterpreterOutput(LiveText):
         gesture="kb:control+shift+n",
         speakOnDemand=True,
     )
-    def script_readLastLine(self, gesture):
+    def script_readLastLine(self, gesture: SendableGesture) -> None:
         self._readTranscriptLine(gesture, "last")
 
     @script(
@@ -218,10 +267,11 @@ class InterpreterOutput(LiveText):
         gesture="kb:control+shift+y",
         speakOnDemand=True,
     )
-    def script_readFirstLine(self, gesture):
+    def script_readFirstLine(self, gesture: SendableGesture) -> None:
         self._readTranscriptLine(gesture, "first")
 
-    def startMonitoring(self):
+    @override
+    def startMonitoring(self) -> None:
         if not self._keepMonitoring:
             self._lastReadText = None
             with self._inputLock:
@@ -230,7 +280,8 @@ class InterpreterOutput(LiveText):
                 self._preparedDiff = None
         super().startMonitoring()
 
-    def event_typedCharacter(self, ch):
+    @override
+    def event_typedCharacter(self, ch: str) -> None:
         # These events are delivered even when NVDA typing echo is disabled.
         if ch.isprintable():
             with self._inputLock:
@@ -238,7 +289,7 @@ class InterpreterOutput(LiveText):
         super().event_typedCharacter(ch)
 
     @script(gestures=["kb:enter", "kb:numpadEnter"])
-    def script_submitCommand(self, gesture):
+    def script_submitCommand(self, gesture: SendableGesture) -> None:
         try:
             # Capture a fast command before Enter can produce a response, even
             # if the polling thread has not observed the final typed characters.
@@ -247,17 +298,22 @@ class InterpreterOutput(LiveText):
                 previous = getattr(self, "_lastReadText", None)
                 if previous is not None:
                     baseline, _ = accountForTypedText(
-                        previous, snapshot, self._pendingTypedText)
+                        previous,
+                        snapshot,
+                        self._pendingTypedText,
+                    )
                     if baseline == snapshot:
                         self._submittedBaseline = snapshot
                         self._pendingTypedText = ""
         except Exception:
             log.exception(
-                "Inform 7 Access: unable to capture submitted command")
+                "Inform 7 Access: unable to capture submitted command",
+            )
         finally:
             gesture.send()
 
-    def _getText(self):
+    @override
+    def _getText(self) -> str:
         # Call the getter directly: the polling thread must not reuse a cached
         # NVDAObject property. This uses cancellable WM_GETTEXT messages and
         # avoids the ITextDocument interface which failed in the supplied log.
@@ -272,19 +328,26 @@ class InterpreterOutput(LiveText):
             if baseline is not None:
                 beforeFiltering = baseline
                 baseline, self._pendingTypedText = accountForTypedText(
-                    baseline, text, self._pendingTypedText)
+                    baseline,
+                    text,
+                    self._pendingTypedText,
+                )
                 self._preparedDiff = (text, baseline)
                 if baseline != beforeFiltering:
                     log.debug(
-                        "Inform 7 Access: typed input excluded from output diff; window=%s", self.windowHandle
+                        "Inform 7 Access: typed input excluded from output diff; window=%s",
+                        self.windowHandle,
                     )
             else:
                 self._pendingTypedText = ""
             self._lastReadText = text
         if previous is None:
             log.debug(
-                "Inform 7 Access: initial text read; window=%s, characters=%s", self.windowHandle, len(
-                    text)
+                "Inform 7 Access: initial text read; window=%s, characters=%s",
+                self.windowHandle,
+                len(
+                    text,
+                ),
             )
         elif text != previous:
             log.debug(
@@ -295,7 +358,8 @@ class InterpreterOutput(LiveText):
             )
         return text
 
-    def _calculateNewText(self, newText, oldText):
+    @override
+    def _calculateNewText(self, newText: str, oldText: str) -> list[str]:
         # _getText runs even when reporting is off, keeping input tracking in
         # sync without accumulating stale keystrokes for the next enable.
         with self._inputLock:
@@ -304,12 +368,13 @@ class InterpreterOutput(LiveText):
                 oldText = prepared[1]
         return super()._calculateNewText(newText, oldText)
 
-    def _reportNewLines(self, lines):
+    @override
+    def _reportNewLines(self, lines: list[str]) -> None:
         # A report can be queued just before focus changes or NVDA+D is used.
         if (
-                self._keepMonitoring
-                and api.getFocusObject() is self
-                and config.conf["presentation"]["reportDynamicContentChanges"]
+            self._keepMonitoring
+            and api.getFocusObject() is self
+            and config.conf["presentation"]["reportDynamicContentChanges"]
         ):
             log.debug(
                 "Inform 7 Access: reporting %s new lines; window=%s",
@@ -325,39 +390,41 @@ class InterpreterOutput(LiveText):
                 config.conf["presentation"]["reportDynamicContentChanges"],
             )
 
-    def _reportNewText(self, line):
+    @override
+    def _reportNewText(self, line: str) -> None:
         # Recent NVDA releases yield while reporting large batches of lines.
         if (
-                self._keepMonitoring
-                and api.getFocusObject() is self
-                and config.conf["presentation"]["reportDynamicContentChanges"]
+            self._keepMonitoring
+            and api.getFocusObject() is self
+            and config.conf["presentation"]["reportDynamicContentChanges"]
         ):
             super()._reportNewText(line)
 
-    def event_textChange(self):
+    @override
+    def event_textChange(self) -> None:
         # Preserve Rich Edit's selection-change tracking as well as LiveText.
         super().event_textChange()
         self.hasContentChangedSinceLastSelection = True
 
 
 class AppModule(appModuleHandler.AppModule):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self._output = None
+        self._output: InterpreterOutput | None = None
         self._terminated = False
-        self._lastFocusStatus = None
-        self._lastInterpreterHandle = None
-        self._lineReadingCursors = {}
+        self._lastFocusStatus: tuple[bool, int | None, bool | None] | None = None
+        self._lastInterpreterHandle: int | None = None
+        self._lineReadingCursors: dict[int, LineReadingCursor] = {}
         # Keep only a weak reference in the timer callback.
         moduleRef = weakref.ref(self)
 
-        def poll():
+        def poll() -> None:
             module = moduleRef()
             if module is not None:
                 module._poll()
 
         self._timer = wx.PyTimer(poll)
-        self._timer.Start(POLL_INTERVAL_MS)
+        _ = self._timer.Start(POLL_INTERVAL_MS)
         log.debug(
             "Inform 7 Access: module loaded; processID=%s, file=%s, pollInterval=%sms",
             self.processID,
@@ -365,10 +432,11 @@ class AppModule(appModuleHandler.AppModule):
             POLL_INTERVAL_MS,
         )
 
-    def chooseNVDAObjectOverlayClasses(self, obj, clsList):
+    @override
+    def chooseNVDAObjectOverlayClasses(self, obj: NVDAObject, clsList: list[type[NVDAObject]]) -> None:
         if (
-                getattr(obj, "windowClassName", "") == "Scintilla"
-                and getattr(obj, "IAccessibleChildID", None) == 0
+            getattr(obj, "windowClassName", "") == "Scintilla"
+            and getattr(obj, "IAccessibleChildID", None) == 0
         ):
             from appModules.inform7Support import registerConfig
             from appModules.inform7Support.editor import InformSourceEditor
@@ -387,14 +455,15 @@ class AppModule(appModuleHandler.AppModule):
         if matched:
             clsList.insert(0, InterpreterOutput)
 
-    def _findStoryStatus(self):
+    def _findStoryStatus(self) -> IAccessible | None:
         root = winUser.getForegroundWindow()
         if not root or winUser.getWindowThreadProcessID(root)[0] != self.processID:
             return None
         # Walk native windows, not the potentially enormous documentation DOM.
         pending = [winUser.getTopWindow(root)]
-        seen = set()
-        interpreters, candidates = [], []
+        seen: set[int] = set()
+        interpreters: list[IAccessible] = []
+        candidates: list[IAccessible] = []
         while pending and len(seen) < 2000:
             hwnd = pending.pop()
             if not hwnd or hwnd in seen:
@@ -420,7 +489,9 @@ class AppModule(appModuleHandler.AppModule):
                     candidates.append(obj)
             except Exception:
                 log.debugWarning(
-                    "Inform 7 Access: unable to inspect status candidate", exc_info=True)
+                    "Inform 7 Access: unable to inspect status candidate",
+                    exc_info=True,
+                )
         focus = api.getFocusObject()
         preferred = getattr(focus, "windowHandle", None)
         if not any(obj.windowHandle == preferred for obj in interpreters):
@@ -440,12 +511,13 @@ class AppModule(appModuleHandler.AppModule):
         gestures=["kb(desktop):NVDA+end", "kb(laptop):NVDA+shift+end"],
         speakOnDemand=True,
     )
-    def script_reportStatusLine(self, gesture):
+    def script_reportStatusLine(self, gesture: SendableGesture) -> None:
         try:
             status = self._findStoryStatus()
             if status is None:
                 ui.message(
-                    "Story status line not found. Open the Story pane and try again.")
+                    "Story status line not found. Open the Story pane and try again.",
+                )
                 return
             # The supplied grid has empty windowText and accValue. Its display
             # model contains the actual room/time fields; get a fresh read.
@@ -465,9 +537,10 @@ class AppModule(appModuleHandler.AppModule):
         except Exception:
             log.exception("Inform 7 Access: unable to read story status line")
             ui.message(
-                "Unable to read the story status line. See the NVDA log for details.")
+                "Unable to read the story status line. See the NVDA log for details.",
+            )
 
-    def _stopMonitoring(self, reason="focus changed"):
+    def _stopMonitoring(self, reason: str = "focus changed") -> None:
         if self._output is not None:
             log.debug(
                 "Inform 7 Access: monitoring stopped; window=%s, reason=%s",
@@ -477,15 +550,18 @@ class AppModule(appModuleHandler.AppModule):
             self._output.stopMonitoring()
             self._output = None
 
-    def _poll(self):
+    def _poll(self) -> None:
         if self._terminated:
             return
         try:
             obj = api.getFocusObject()
             belongsToApp = obj is not None and obj.appModule is self
             enabled = config.conf["presentation"]["reportDynamicContentChanges"]
-            status = (belongsToApp, id(obj) if belongsToApp else None,
-                      enabled if belongsToApp else None)
+            status = (
+                belongsToApp,
+                id(obj) if belongsToApp else None,
+                enabled if belongsToApp else None,
+            )
             if status != self._lastFocusStatus:
                 self._lastFocusStatus = status
                 log.debug(
@@ -494,9 +570,17 @@ class AppModule(appModuleHandler.AppModule):
                     enabled,
                     isinstance(obj, InterpreterOutput),
                     describeObject(
-                        obj) if belongsToApp else "focus outside this Inform process",
+                        obj,
+                    )
+                    if belongsToApp
+                    else "focus outside this Inform process",
                 )
-                if belongsToApp and isInterpreterCandidate(obj) and not isinstance(obj, InterpreterOutput):
+                if (
+                    belongsToApp
+                    and obj is not None
+                    and isInterpreterCandidate(obj)
+                    and not isinstance(obj, InterpreterOutput)
+                ):
                     log.warning(
                         "Inform 7 Access: focused interpreter candidate has no overlay; restart NVDA to recreate it",
                     )
@@ -509,7 +593,9 @@ class AppModule(appModuleHandler.AppModule):
                 self._lastInterpreterHandle = obj.windowHandle
                 obj.startMonitoring()
                 log.debug(
-                    "Inform 7 Access: monitoring started; window=%s", obj.windowHandle)
+                    "Inform 7 Access: monitoring started; window=%s",
+                    obj.windowHandle,
+                )
             else:
                 # Poll as well as accepting real events. LiveText updates its
                 # baseline even with reporting off, preventing a backlog on enable.
@@ -518,24 +604,29 @@ class AppModule(appModuleHandler.AppModule):
             log.exception("Inform 7 Access: unable to monitor interpreter")
             self._stopMonitoring("monitoring error")
 
-    def event_gainFocus(self, obj, nextHandler):
+    def event_gainFocus(self, obj: NVDAObject, nextHandler: Callable[[], None]) -> None:
         try:
-            log.debug("Inform 7 Access: object gainFocus event; %s",
-                      describeObject(obj))
+            log.debug(
+                "Inform 7 Access: object gainFocus event; %s",
+                describeObject(obj),
+            )
             self._poll()
         finally:
             nextHandler()
 
-    def event_appModule_gainFocus(self):
-        log.debug("Inform 7 Access: app gained focus; processID=%s",
-                  self.processID)
+    def event_appModule_gainFocus(self) -> None:
+        log.debug(
+            "Inform 7 Access: app gained focus; processID=%s",
+            self.processID,
+        )
         self._poll()
 
-    def event_appModule_loseFocus(self):
+    def event_appModule_loseFocus(self) -> None:
         log.debug("Inform 7 Access: app lost focus; processID=%s", self.processID)
         self._stopMonitoring("app lost focus")
 
-    def terminate(self):
+    @override
+    def terminate(self) -> None:
         try:
             super().terminate()
         finally:
@@ -543,4 +634,6 @@ class AppModule(appModuleHandler.AppModule):
             self._timer.Stop()
             self._stopMonitoring("module terminated or plugins reloaded")
             log.debug(
-                "Inform 7 Access: module terminated; processID=%s", self.processID)
+                "Inform 7 Access: module terminated; processID=%s",
+                self.processID,
+            )
