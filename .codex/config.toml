@@ -1,0 +1,5 @@
+default_permissions = "protect-readme"
+
+[permissions.protect-readme]
+extends = ":workspace"
+filesystem = { ":workspace_roots" = { "README.md" = "read" } }
