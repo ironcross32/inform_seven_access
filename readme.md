@@ -8,6 +8,10 @@ Inform even comes with a set of keyboard shortcuts which allow jumping to variou
 
 Where NVDA doesn't work well with a particular app, chances are, there's an addon made by its community of users. Of course, there are addons for all sorts of things, and not all of them resolve a particular issue. Some of them add extra functionality to NVDA. This addon sets out to do a bit of both.
 
+### Downloading
+
+You can grab the latest version [here](https://github.com/ironcross32/inform_seven_access/releases/latest)
+
 ### Usage
 
 After installation, focus the Inform application. As you arrow through your source text, you'll get announcements for quoted text, text substitutions. comments, and headings. If you wish, you can locate the Inform 7 category in NVDA's settings and enable sounds for these announcements, or turn them off entirely.
@@ -25,10 +29,10 @@ There is one additional keystroke that applies while the interpreter window has 
 
 ### Building
 
-First, follow [these instructions](https://github.com/nvdaaddons/DevGuide/wiki/NVDA-Add-on-Development-Guide#setting-up-your-add-on-development-environment) to get your developer environment setup, then clone the repository, change into it's directory, preferably with a virtual environment activated and build. The process might look like this:
+First, follow [these instructions](https://github.com/nvdaaddons/DevGuide/wiki/NVDA-Add-on-Development-Guide#setting-up-your-add-on-development-environment) to get your developer environment setup, then clone the repository, change into it's directory, preferably with a virtual environment activated and build.
 ```
-git clone https://github.com/ironcross32/inform_seven_accessibility.git
-cd inform_seven_accessibility
+git clone https://github.com/ironcross32/inform_seven_access.git
+cd inform_seven_access
 scons -s
 ```
 If all goes well, an NVDA addon will be produced. Pressing **ENTER** on it will start the installation process.
