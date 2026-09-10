@@ -27,7 +27,7 @@ addon_info = AddonInfo(
     Provides a set of hotkeys to review the output separately from NVDA's review cursor
     Announces syntax highlighting in the editor with speech, sounds, both, or none at all"""),
     # version
-    addon_version="0.2.1",
+    addon_version="0.2.2",
     # Brief changelog for this version
     # Translators: what's new content for the add-on version to be shown in the add-on store
     addon_changelog=_(
