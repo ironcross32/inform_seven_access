@@ -2,6 +2,11 @@
 
 ## 0.2.0 prototype
 
+- Use NVDA's native status-bar commands for the Inform story status grid through
+  the app-module status hooks, including standard speech, spelling, clipboard,
+  braille, and missing-status handling. When focus is outside the interpreter,
+  explain how to focus it with Control+F3 before requesting the story status.
+
 - Move routine focus, interpreter-output and lifecycle diagnostics to Debug,
   keeping normal Info logs quiet while retaining warnings and errors.
 

@@ -30,7 +30,11 @@ For local deployment, preview with `uv run python copy_to_scratchpad.py --scratc
 
 ## Coding Style & Naming Conventions
 
-Use spaces, LF endings, and Ruff's 110-character line limit. Follow surrounding naming: PascalCase classes, NVDA-style camelCase methods and callbacks, and UPPER_SNAKE_CASE constants. Preserve NVDA API signatures and wrap user-facing text with `_()` for translation.
+Use tabs, LF endings, and Ruff's 110-character line limit. Follow surrounding naming: PascalCase classes, NVDA-style camelCase methods and callbacks, and UPPER_SNAKE_CASE constants. Preserve NVDA API signatures and wrap user-facing text with `_()` for translation.
+
+Use tabs for code indentation in source, tests, type stubs, and build/release scripts. Ruff and `.editorconfig` enforce these defaults. Preserve spaces inside string data and prose, and use spaces for YAML indentation as required by that format.
+
+Follow the [NVDA addon development guide](https://github.com/nvdaaddons/devguide/wiki/NVDA%20Add-on%20Development%20Guide). If the guide suggests something that goes against Python convensions, defer to the guide's way of doing things.
 
 ## Testing Guidelines
 

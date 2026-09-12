@@ -187,3 +187,225 @@ Compatibility manifest fields remain unset pending these live checks.
 - This working folder has no Git metadata. A feature branch and repository-local
   alias could not be created. The installed global alias invokes the script in the
   current Git repository; releasing requires a checkout with an origin remote.
+
+## Compile focus suppression (2026-09-12)
+
+Implemented on `feat/compile-focus-suppression`. F5 starts a project-scoped
+session before forwarding the key once. Intermediate Chromium and recorded MFC
+pane focus presentation is withheld; NVDA still maintains focus normally.
+Interpreter arrival releases immediately. A local `Build/Problems.html` report
+must remain ready and not busy for at least 750 ms before normal browser
+presentation resumes. The session expires after 120 seconds.
+
+Automated validation uses Python 3.13 after activating the parent `env64`.
+`uv` uses this repository's locked `.venv`, as configured by the project.
+
+- Unit tests: 93 passed, including synthetic successful and failed compile
+  sequences without recorded story text, names, or handles.
+- Coverage includes ancestor/browser guards, delayed readiness, busy/loading
+  resets, native document replacement and Python object recreation, repeated
+  F5, forwarding/inspection failures, long compilation, timeout, gesture
+  cancellation, app/project switches, returning, and plugin reload callbacks.
+- Browser delegation tests verify the saved selection and automatic-reading
+  configuration are unchanged; ordinary navigation and interpreter tests pass.
+- Ruff lint/format checks and configured pre-commit hooks, including Pyright,
+  pass. Hooks applied trailing-comma and formatting fixes to the new code.
+- `uv run scons -s` builds `informSevenAccess-0.2.2.nvda-addon` for review.
+  The package includes `doc/en/compiling.html`. No deployment was performed.
+- README.md remains unchanged; debug.log remains untracked.
+
+Compatibility source inspection covered NVDA 2025.1 and 2026.1.1 Chromium
+document/buffer classes, gesture decider, focus event ordering, and virtual
+buffer loading/browser presentation. See `typings/API.md` for the upstream
+references. The add-on delegates buffer loading, initial/saved caret position,
+and automatic-reading preferences to NVDA rather than copying its implementation.
+This is API inspection and stub testing, not live compatibility certification.
+
+Outstanding live speech/braille checks on both compatibility endpoints:
+
+1. Compile successful and failing disposable projects with F5 from the editor,
+   an existing browser document, and the interpreter. Confirm intermediate
+   documents and pane ancestors are silent, the interpreter is presented
+   immediately, and the translation report is presented once.
+2. Repeat with automatic page reading on/off and with a saved report reading
+   position. Confirm normal speech and braille presentation and reading position.
+3. Exercise slow compilation, delayed browser loading, and report replacement.
+   Validate the 750 ms heuristic; it cannot prove compilation has finished.
+4. Switch away and back during/after compilation, including between projects in
+   one Inform process. Confirm no stale output in the other application and no
+   resumed suppression on returning. Test repeated F5 and plugin reload.
+5. Press modifiers alone, then navigation keys and braille gestures. Confirm
+   cancellation before ordinary interaction, normal dialogs/menus/editor focus,
+   and unchanged browser navigation and interpreter output outside compilation.
+
+These live checks require interactive NVDA/Inform use and remain unperformed.
+No compatibility manifest claim was added.
+
+## Automatic compile trace (2026-09-12)
+
+- Added NVDA+Shift+F5 to arm the next F5 compilation, disarm, or stop an active
+  trace. Files are saved and flushed incrementally under
+  `%TEMP%\inform7-access-traces`; no separate application is required.
+- Captures existing NVDA focus/ancestor objects, available MSAA/IA2 identifiers,
+  roles/states/names, document URLs, browser readiness, presentation decisions,
+  and explicit suppression termination reasons. No full tree traversal or
+  editor/interpreter text retrieval is performed.
+- The trace outlives early suppression cancellation, with a 15-second minimum
+  observation period and three-second quiet tail once suppression ends. The
+  hard limits are 120 seconds and 4,000 events. Switching windows, forwarding
+  failure, manual stop, and plugin termination close the trace.
+- All 103 unit tests pass, including ten new tests for arming, native ancestor
+  capture, early cancellation, repeated F5, foreground isolation, property/file
+  failures, manual stop/reload, and time/event limits. Existing suppression tests
+  continue to pass. Ruff, Pyright, and configured hooks pass; the review add-on
+  was rebuilt with the trace module and updated packaged help.
+- Live validation remains outstanding: arm tracing in Inform, compile a project
+  that produces repeated tab-panel announcements, and inspect the resulting
+  JSONL file against audible speech. Test the shortcut with the user's keyboard
+  layout and check the saved path is reachable. No deployment was performed.
+
+## Trace-driven ancestor suppression fix (2026-09-12)
+
+The user's 08:54:28 capture showed an uninterrupted suppression session ending
+at 3.9524 seconds with `interpreter arrived`. All recorded document focus and
+browser presentation attempts during the session were suppressed. However, 28
+`focusEntered` events for native ancestors were allowed through while suppression
+was active. These included two `AfxWnd140s` TABCONTROL events at approximately
+0.257 and 3.257 seconds, plus MFC pane/window wrappers and Chromium widget panes.
+The capture records presentation decisions, not the resulting speech, so it does
+not establish that every one of these events produced an audible announcement.
+
+- Added a separate ancestor filter for the observed MFC window-class forms,
+  AfxWnd tab controls/panes, MDI frames, and `Chrome_WidgetWin_1` pane wrappers.
+  Matching uses structural roles/classes, never project titles or saved handles.
+- The focused-destination filter remains narrow. Native tab-control/pane focus,
+  dialogs, menus, editor focus, interpreter arrival, and project switches retain
+  their existing cancellation and normal presentation behavior.
+- All 107 tests pass, including synthetic replay of the observed wrapper types
+  across six browser destinations, interpreter release, actual-focus exclusion,
+  unrelated role/class exclusion, and out-of-session/project-switch handling.
+  The tracing test now confirms the observed tab-control ancestor is suppressed.
+- Ruff, Pyright, configured pre-commit hooks, and the review add-on build pass.
+  README.md and the original capture were not modified; the capture was not
+  copied into the repository. No deployment was performed.
+
+Outstanding live check: repeat the same compilation with the rebuilt add-on and
+tracing enabled. Confirm tab/pane ancestors are silent, interpreter output still
+starts normally, and the previously allowed ancestor events now show
+`suppressed: true`. Repeat a failing compilation to verify final report reading.
+
+## Error reports and fast reruns (2026-09-12)
+
+The 09:09:38 successful capture and the user's listening check confirmed clean
+suppression through interpreter arrival. The 09:13:58 deliberate-error capture
+showed a ready report at 1.9808 seconds, but the traced document value was null.
+There was no report-settled release; suppression ended only on a user gesture at
+10.184 seconds. Report recognition now uses NVDA's browser `documentURL`, followed
+by the native `accValue(0)` fallback, instead of relying on the ordinary value.
+It still invokes normal browser presentation once and preserves reading settings.
+
+The 09:13:30 unchanged-source capture cancelled at 0.0791 seconds on a failed
+focus-ownership check, then focused an unnamed UNKNOWN AfxWnd pane at 0.1068
+seconds and the interpreter at 0.7857 seconds. The first focus object's properties
+were omitted by the old trace filter, so its exact native root remains unknown.
+The new trace includes structural identities and native roots even when full
+object inspection is excluded, plus the effective document URL.
+
+An unnamed UNKNOWN AfxWnd client pane is now a bounded transition destination.
+An unresolved native root can also be bridged when the nearest focus ancestor
+is this pane in the originating project. Both cases share a 1.5-second limit;
+foreground switches, live foreign roots, named controls, and dialogs still cancel.
+Expiry restores presentation of a still-owned withheld destination once.
+
+All 115 tests pass, including empty-value reports, native URL fallback and URL
+priority, delayed report URL availability, detached focus followed by the
+unnamed pane/interpreter, grace expiry, missing ancestry, foreign-root rejection,
+and trace diagnostics. Ruff, Pyright, configured hooks, and the review build pass.
+README.md and the supplied traces were not modified. No deployment was performed.
+
+Live checks still needed with the rebuilt add-on: repeat successful, deliberate
+error, and unchanged-source compilations. Confirm the error report is presented
+once, no preliminary report interrupts a successful compile, and fast reruns
+remain quiet until interpreter arrival. If the first fast-rerun focus object has
+a live unexpected root, the improved trace is needed to identify it rather than
+broadening the foreground guard speculatively.
+
+## Destroyed interpreter on unchanged-source rerun (2026-09-12)
+
+The latest successful and deliberate-error captures, together with the user's
+listening checks, confirm that those paths work. The error report now releases
+normally with `report settled` at approximately 3.13 seconds.
+
+The 09:32:53 fast-rerun capture identifies the remaining gap: at 0.0742 seconds,
+focus points to an EDITABLETEXT RICHEDIT50W object from the Inform process whose
+native root is zero. Its surviving project ancestor is an unnamed AfxWnd PANE.
+The previous grace rule excluded editable objects and required an UNKNOWN parent,
+so it cancelled. An UNKNOWN pane then received focus at 0.0992 seconds, followed
+by the replacement interpreter at 0.8112 seconds.
+
+- Extended the existing 1.5-second grace specifically to this destroyed Rich Edit
+  object with an unnamed owning pane. It does not depend on the destroyed
+  window's native style. Only its matching dead WindowRoot wrapper may be skipped
+  when checking the nearest surviving ancestor.
+- Silences the stale window wrapper and defers interpreter output monitoring
+  until valid interpreter focus arrives. The existing UNKNOWN pane transition
+  continues within the same time limit.
+- Added four regression tests for the full dead-interpreter/pane/replacement
+  sequence, excluded parents/editor classes, grace expiry, and project switching.
+  All 119 tests, Ruff checks, Pyright, and configured hooks pass. The review build
+  includes the fix; no deployment was performed.
+- README.md and all supplied traces remain untouched.
+
+Remaining live check: repeat the unchanged-source rerun and confirm the last
+`unknown` is gone. Its trace should retain suppression through the destroyed
+interpreter and temporary pane, then end with `interpreter arrived`.
+
+## Final compile suppression live validation (2026-09-12)
+
+The user's 09:46:14 unchanged-source capture confirms the remaining rerun check:
+the destroyed interpreter and its window wrapper, the unnamed pane, and their
+intermediate focus events are all suppressed. The transient interval starts at
+0.0744 seconds and suppression ends normally with `interpreter arrived` at
+0.7903 seconds, well within the 1.5-second limit. The replacement interpreter's
+focus presentation is allowed. There is no unexpected cancellation or timeout.
+
+The user confirms the audible result is clean. Together with the preceding
+successful and deliberate-error compilation checks, this completes the reported
+compile-announcement issue. No further implementation changes were made after
+reviewing this trace. This records the user's tested environment; it does not
+claim additional braille or cross-version validation.
+
+## Tab indentation (2026-09-12)
+
+- Converted Python source, tests, stubs, build scripts, PowerShell, and editor JSON
+  indentation to tabs. Ruff now enforces tabs, including `buildVars.py`;
+  `.editorconfig` and VS Code defaults support future edits.
+- All 119 unit tests and Ruff lint/format checks pass. All 51 Python/stub/build
+  syntax trees match the original after normalizing docstring indentation.
+  The PowerShell release script parses without errors; README.md's hash is unchanged.
+- Excluded the local uv dependency cache from Pyright's source scan.
+- All configured pre-commit hooks pass, including Pyright.
+- This formatting change introduces no new live accessibility checks.
+
+## Native app-module story status (2026-09-12)
+
+- Replaced the app module's custom status-line script and gesture bindings with
+  NVDA's `_get_statusBar` and `getStatusBarText` app-module hooks. The existing
+  native-window lookup, dual-pane selection, and fresh display-model formatting
+  remain in use.
+- Added a `statusBarTextInfo` hook returning no fallback position. When the Story
+  pane is absent, NVDA therefore reports a missing status line instead of reading
+  Inform's unrelated IDE status bar from the bottom of the display model.
+- When the status command is used outside the interpreter, its native app-module
+  text hook now explains that the user can focus the interpreter with Control+F3
+  and try again.
+- All 120 unit tests pass. Ruff lint and format checks, Pyright, all configured
+  pre-commit hooks, and the review build pass. README.md was not modified, and no
+  deployment was performed.
+
+Live checks still needed with the rebuilt add-on: verify NVDA's status command
+from both the source editor and interpreter in desktop and laptop layouts; verify
+single-press speech, double-press spelling, triple-press copying, changing room
+and time values, dual Story panes, an empty status grid, and a closed Story pane.
+Outside the interpreter, confirm the Control+F3 guidance is announced. The
+closed-pane case must not announce Inform's IDE status bar.

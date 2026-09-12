@@ -15,8 +15,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location(
-    "scratchpad_copier",
-    ROOT / "copy_to_scratchpad.py",
+	"scratchpad_copier",
+	ROOT / "copy_to_scratchpad.py",
 )
 assert spec is not None and spec.loader is not None
 copier = importlib.util.module_from_spec(spec)
@@ -24,77 +24,77 @@ spec.loader.exec_module(copier)
 
 
 class ScratchpadTests(unittest.TestCase):
-    @override
-    def setUp(self) -> None:
-        self.temp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / "scratchpad"
-        output = contextlib.redirect_stdout(io.StringIO())
-        _ = output.__enter__()
-        self.addCleanup(output.__exit__, None, None, None)
+	@override
+	def setUp(self) -> None:
+		self.temp = tempfile.TemporaryDirectory()
+		self.addCleanup(self.temp.cleanup)
+		self.root = Path(self.temp.name) / "scratchpad"
+		output = contextlib.redirect_stdout(io.StringIO())
+		_ = output.__enter__()
+		self.addCleanup(output.__exit__, None, None, None)
 
-    def test_dry_run_creates_nothing(self) -> None:
-        copier.copy_to_scratchpad(self.root, True)
-        self.assertFalse(self.root.exists())
+	def test_dry_run_creates_nothing(self) -> None:
+		copier.copy_to_scratchpad(self.root, True)
+		self.assertFalse(self.root.exists())
 
-    def test_deploys_all_components_and_preserves_backups_and_unrelated_files(self) -> None:
-        app = self.root / "appModules" / "inform.py"
-        app.parent.mkdir(parents=True)
-        _ = app.write_text("old version")
-        unrelated = app.with_name("anotherAddon.py")
-        _ = unrelated.write_text("unrelated")
-        copier.copy_to_scratchpad(self.root)
-        for source in copier.deployment_sources():
-            self.assertEqual(
-                (self.root / source.relative_to(copier.ADDON)).read_bytes(),
-                source.read_bytes(),
-            )
-        self.assertEqual(
-            app.with_name(
-                "inform.py.bak",
-            ).read_text(),
-            "old version",
-        )
-        self.assertEqual(unrelated.read_text(), "unrelated")
-        copier.copy_to_scratchpad(self.root)
-        self.assertFalse(app.with_name("inform.py.bak.1").exists())
-        _ = app.write_text("second version")
-        copier.copy_to_scratchpad(self.root)
-        self.assertEqual(
-            app.with_name(
-                "inform.py.bak.1",
-            ).read_text(),
-            "second version",
-        )
-        self.assertEqual(
-            app.with_name(
-                "inform.py.bak",
-            ).read_text(),
-            "old version",
-        )
+	def test_deploys_all_components_and_preserves_backups_and_unrelated_files(self) -> None:
+		app = self.root / "appModules" / "inform.py"
+		app.parent.mkdir(parents=True)
+		_ = app.write_text("old version")
+		unrelated = app.with_name("anotherAddon.py")
+		_ = unrelated.write_text("unrelated")
+		copier.copy_to_scratchpad(self.root)
+		for source in copier.deployment_sources():
+			self.assertEqual(
+				(self.root / source.relative_to(copier.ADDON)).read_bytes(),
+				source.read_bytes(),
+			)
+		self.assertEqual(
+			app.with_name(
+				"inform.py.bak",
+			).read_text(),
+			"old version",
+		)
+		self.assertEqual(unrelated.read_text(), "unrelated")
+		copier.copy_to_scratchpad(self.root)
+		self.assertFalse(app.with_name("inform.py.bak.1").exists())
+		_ = app.write_text("second version")
+		copier.copy_to_scratchpad(self.root)
+		self.assertEqual(
+			app.with_name(
+				"inform.py.bak.1",
+			).read_text(),
+			"second version",
+		)
+		self.assertEqual(
+			app.with_name(
+				"inform.py.bak",
+			).read_text(),
+			"old version",
+		)
 
-    def test_source_directory_rejected_before_any_copy(self) -> None:
-        with self.assertRaises(ValueError):
-            copier.copy_to_scratchpad(copier.ADDON)
+	def test_source_directory_rejected_before_any_copy(self) -> None:
+		with self.assertRaises(ValueError):
+			copier.copy_to_scratchpad(copier.ADDON)
 
-    def test_sound_deployment_preserves_changed_and_unrelated_sounds(self) -> None:
-        folder = self.root / "sounds"
-        folder.mkdir(parents=True)
-        _ = (folder / "quote_start.wav").write_bytes(b"previous sound")
-        _ = (folder / "unrelated.wav").write_bytes(b"another plugin")
-        copier.copy_to_scratchpad(self.root)
-        sounds = list((copier.ADDON / "sounds").glob("*.wav"))
-        self.assertEqual(len(sounds), 8)
-        for source in sounds:
-            self.assertEqual(
-                (folder / source.name).read_bytes(),
-                source.read_bytes(),
-            )
-        self.assertEqual(
-            (folder / "quote_start.wav.bak").read_bytes(),
-            b"previous sound",
-        )
-        self.assertEqual(
-            (folder / "unrelated.wav").read_bytes(),
-            b"another plugin",
-        )
+	def test_sound_deployment_preserves_changed_and_unrelated_sounds(self) -> None:
+		folder = self.root / "sounds"
+		folder.mkdir(parents=True)
+		_ = (folder / "quote_start.wav").write_bytes(b"previous sound")
+		_ = (folder / "unrelated.wav").write_bytes(b"another plugin")
+		copier.copy_to_scratchpad(self.root)
+		sounds = list((copier.ADDON / "sounds").glob("*.wav"))
+		self.assertEqual(len(sounds), 8)
+		for source in sounds:
+			self.assertEqual(
+				(folder / source.name).read_bytes(),
+				source.read_bytes(),
+			)
+		self.assertEqual(
+			(folder / "quote_start.wav.bak").read_bytes(),
+			b"previous sound",
+		)
+		self.assertEqual(
+			(folder / "unrelated.wav").read_bytes(),
+			b"another plugin",
+		)

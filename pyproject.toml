@@ -68,11 +68,10 @@ exclude = [
 	".git",
 	"__pycache__",
 	".venv",
-	"buildVars.py",
 ]
 
 [tool.ruff.format]
-indent-style = "space"
+indent-style = "tab"
 line-ending = "lf"
 
 [tool.ruff.lint.mccabe]
@@ -108,6 +107,7 @@ exclude = [
 	"__pycache__",
 	".venv",
 	"site_scons",
+	".uv-cache",
 	# When excluding concrete paths relative to a directory,
 	# not matching multiple folders by name e.g. `__pycache__`,
 	# paths are relative to the configuration file.
