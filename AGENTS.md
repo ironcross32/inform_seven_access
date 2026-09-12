@@ -42,4 +42,4 @@ Use `unittest`, `test_*.py` files, and `test_*` methods. Add regression tests fo
 
 ## Commit & Pull Request Guidelines
 
-Git history is unavailable in this checkout, so commit conventions cannot be verified. Use concise imperative subjects, such as `Fix duplicate syntax announcements`. Work on a feature branch. PRs should describe behavior changes, link relevant issues, report automated and live validation, and update documentation or the changelog for user-visible changes.
+Git history is unavailable in this checkout, so commit conventions cannot be verified. Use concise imperative subjects, such as `Fix duplicate syntax announcements`. Do not create new branches unless explicitly instructed to do so. PRs should describe behavior changes, link relevant issues, report automated and live validation, and update documentation or the changelog for user-visible changes.
